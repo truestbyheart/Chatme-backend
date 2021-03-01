@@ -1,3 +1,4 @@
+import { Socket } from "socket.io";
 import client from "../../database";
 
 class ChatService {
@@ -15,6 +16,11 @@ class ChatService {
         const deleteMessageSql = 'DELETE FROM chats WHERE id = $1';
         return (await client.query(deleteMessageSql, [messageId])).rowCount;
     }
+
+   async storeMessage(body: { from: string; to: string; message: string}) {
+        const insertMessageSql = 'INSERT INTO chats (receiver, sender, message, updatedat, createdat) VALUES ($1, $2, $3, $4, $5) RETURNING *';
+       return (await client.query(insertMessageSql, [body.to, body.from, body.message, new Date().toISOString(), new Date().toISOString()])).rows;
+   }
 }
 
 export default ChatService;

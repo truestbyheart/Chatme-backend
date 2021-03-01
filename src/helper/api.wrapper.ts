@@ -54,15 +54,20 @@ class APIWrapper {
       const method = req.method;
       const url = req.url;
 
-      // setup cors
-      const headers = {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "OPTIONS, POST, GET, PUT, PATCH, DELETE",
-        "Access-Control-Max-Age": 2592000,
-      };
-
       // check if the route is present
       const found = this.findRoute(method as string, url as string);
+      // setting up cors
+      res.setHeader("Access-Control-Allow-Origin", "*",);
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+      res.setHeader('Access-Control-Max-Age', 2592000);
+      res.setHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+
+      if (req.method === "OPTIONS") {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
 
       if (found) {
         // @ts-ignore
@@ -86,16 +91,18 @@ class APIWrapper {
 
         // @ts-ignore
         res.send = (content: any) => {
-          res.writeHead(200, { 'Content-Type': 'text/plain', ...headers });
+          res.setHeader("content-type", "text/plain");
           res.write(content)
-          res.end();
+          return res.end();
         };
 
         // @ts-ignore
         res.json = (content: any) => {
-          res.writeHead(200, { 'Content-Type': 'application/json', ...headers });
+          res.setHeader("content-type", "application/json");
+          // res.statusCode = content.status | 200;
+          res.writeHead(content.status || 200)
           res.write(JSON.stringify(content));
-          res.end();
+          return res.end();
         }
         return found.handler(req as any, res as any);
       }

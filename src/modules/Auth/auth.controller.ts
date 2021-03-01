@@ -26,7 +26,6 @@ class AuthController {
                 email: result.rows[0].email
             }
             const token = this._authHelper.createToken(payload);
-
             return res.json({
                 status: OK,
                 token,
@@ -38,7 +37,6 @@ class AuthController {
         const { body } = req;
 
         const result = await this._authService.validateAuthDetails(body);
-
         if (!result) {
             return res.json({
                 status: UNAUTHORIZED,

@@ -17,8 +17,6 @@ for (let sql of migrations) {
         } catch (error) {
             await client.query('ROLLBACK')
             throw error;
-        } finally {
-            client.end();
-        }
+        } 
     })().catch(e => console.error(e.stack))
 }

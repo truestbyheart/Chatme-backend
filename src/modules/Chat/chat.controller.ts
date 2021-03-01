@@ -1,4 +1,5 @@
 import { CONFLICT, INTERNAL_SERVER_ERROR, OK, UNAUTHORIZED } from 'http-status';
+import { Server, Socket } from 'socket.io';
 import { Request, Response } from '../../helper/api.wrapper';
 import AuthHelper, { TokenPayload } from '../../helper/auth.helper';
 import ChatService from './chat.service';
