@@ -1,17 +1,18 @@
-import { Server, Socket } from "socket.io";
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+import { Server, Socket } from 'socket.io';
 import apiWrapper from './helper/api.wrapper';
 import catchAsync from './helper/asyncHandler';
 
-// controllers 
+// controllers
 import authController from './modules/Auth/auth.controller';
 import chatController from './modules/Chat/chat.controller';
 
 // services and helper
 import ChatService from './modules/Chat/chat.service';
-import AuthHelper from './helper/auth.helper'
-import { OK, UNAUTHORIZED } from "http-status";
+import AuthHelper from './helper/auth.helper';
+import { OK, UNAUTHORIZED } from 'http-status';
 import { Request, Response } from './helper/api.wrapper';
-import usersController from "./modules/Users/users.controller";
+import usersController from './modules/Users/users.controller';
 
 const PORT = process.env.PORT || 3001;
 
@@ -28,26 +29,26 @@ const io = new Server(httpServer);
 
 let externalSocket: Socket;
 io.on('connection', (socket: Socket) => {
-    console.log('connection established', socket.id);
-    const chatID = socket.handshake.query.chatID;
-    socket.join(chatID as string);
+  console.log('connection established', socket.id);
+  const chatID = socket.handshake.query.chatID;
+  socket.join(chatID as string);
 
-    socket.on('disconnect', (socket: Socket) => {
-        console.log(`Disconnected from ${socket.id}`);
-    })
+  socket.on('disconnect', (socket: Socket) => {
+    console.log(`Disconnected from ${socket.id}`);
+  });
 
-    socket.on('join', (room) => {
-        console.log(`Socket ${socket.id} joining ${room}`);
-        socket.join(room);
-    });
+  socket.on('join', (room) => {
+    console.log(`Socket ${socket.id} joining ${room}`);
+    socket.join(room);
+  });
 
-    socket.on('chat', (data) => {
-        const { message, room } = data;
-        console.log(`msg: ${message}, room: ${room}`);
-        io.to(room).emit('chat', message);
-    });
+  socket.on('chat', (data) => {
+    const { message, room } = data;
+    console.log(`msg: ${message}, room: ${room}`);
+    io.to(room).emit('chat', message);
+  });
 
-    externalSocket = socket;
+  externalSocket = socket;
 });
 
 // ROUTES
@@ -58,37 +59,42 @@ router.patch('/messages/:messageId', catchAsync(chatController.updateMessage.bin
 router.delete('/messages/:messageId', catchAsync(chatController.deleteMessage.bind(chatController)));
 router.get('/users', catchAsync(usersController.getUserList.bind(usersController)));
 
-
 // message handler
-router.post('/messages/send-message', catchAsync(async (req: Request, res: Response) => {
-    const { body, headers: { authorization } } = req;
+router.post(
+  '/messages/send-message',
+  catchAsync(async (req: Request, res: Response) => {
+    const {
+      body,
+      headers: { authorization },
+    } = req;
 
-    // verify token 
+    // verify token
     const isValidToken = authHelper.verifyToken(authorization as string);
     if (isValidToken) {
-        // @ts-ignore
-        const result = await chatService.storeMessage({ ...body, from: isValidToken?.username });
+      // @ts-ignore
+      const result = await chatService.storeMessage({ ...body, from: isValidToken?.username });
 
-        if (result.length > 0) {
-            if (externalSocket) {
-                console.log('send it to ', body.to)
-                io.emit(body.to, body.message)
-                externalSocket.in(body.to).emit('chat', JSON.stringify(result[0]));
-            }
-            return res.json({
-                status: OK,
-                message: 'message sent',
-                result,
-            })
+      if (result.length > 0) {
+        if (externalSocket) {
+          console.log('send it to ', body.to);
+          io.emit(body.to, body.message);
+          externalSocket.in(body.to).emit('chat', JSON.stringify(result[0]));
         }
+        return res.json({
+          status: OK,
+          message: 'message sent',
+          result,
+        });
+      }
     }
 
     // respond to unauthenticated clients
     return res.json({
-        status: UNAUTHORIZED,
-        message: 'Please login to perform action',
-    })
-}))
+      status: UNAUTHORIZED,
+      message: 'Please login to perform action',
+    });
+  }),
+);
 
 // START SERVER
 httpServer.listen(PORT, async () => console.log(`App running on port ${PORT}`));
