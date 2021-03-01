@@ -10,7 +10,7 @@
     "db:migrate": "ts-node src/database/migration/index.ts",
     "build": "tsc",
     "lint": "./node_modules/.bin/eslint . --ext .ts --fix",
-    "postinstall": "npm-run-all lint build"
+    "postinstall": "npm-run-all lint build db:migrate"
   },
   "author": "Daniel Mwangila",
   "license": "MIT",
