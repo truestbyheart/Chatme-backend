@@ -7,7 +7,10 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node build/server.js",
     "start:dev": "npx cross-env NODE_ENV=development ts-node src/server.ts",
-    "db:migrate": "ts-node src/database/migration/index.ts"
+    "db:migrate": "ts-node src/database/migration/index.ts",
+    "build": "tsc",
+    "lint": "./node_modules/.bin/eslint . --ext .ts --fix",
+    "postinstall": "npm-run-all lint build"
   },
   "author": "Daniel Mwangila",
   "license": "MIT",

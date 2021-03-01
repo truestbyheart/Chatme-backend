@@ -37,14 +37,17 @@ class AuthService {
         const emailExists = await client.query(commonQueries.checkEmailSql, [data.email]);
 
         // add the duplicate fild to creds object
-        if (usernameExists.rows.length > 0) creds.username = usernameExists.rows[0].username;
-        if (emailExists.rows.length > 0) creds.email = emailExists.rows[0].email;
+        let message = '';
+        if (usernameExists.rows.length > 0) {
+            message = 'username already exists'
+        }else if (emailExists.rows.length > 0) {
+            message = 'email already exists'
+        }
 
         if (usernameExists.rows.length > 0 || emailExists.rows.length > 0) {
             return response.json({
                 status: CONFLICT,
-                message: 'user creds already exists',
-                properties: creds
+                message,
             });
         }
     }

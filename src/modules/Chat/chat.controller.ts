@@ -1,7 +1,6 @@
-import { CONFLICT, INTERNAL_SERVER_ERROR, OK, UNAUTHORIZED } from 'http-status';
-import { Server, Socket } from 'socket.io';
+import { CONFLICT, OK, UNAUTHORIZED } from 'http-status';
 import { Request, Response } from '../../helper/api.wrapper';
-import AuthHelper, { TokenPayload } from '../../helper/auth.helper';
+import AuthHelper from '../../helper/auth.helper';
 import ChatService from './chat.service';
 
 class ChatController {

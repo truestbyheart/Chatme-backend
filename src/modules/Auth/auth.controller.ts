@@ -28,6 +28,7 @@ class AuthController {
             const token = this._authHelper.createToken(payload);
             return res.json({
                 status: OK,
+                username: result.rows[0].username,
                 token,
             });
         }
@@ -52,6 +53,7 @@ class AuthController {
         const token = this._authHelper.createToken(payload);
         return res.json({
             status: OK,
+            username: result.username,
             token
         })
     }
