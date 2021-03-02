@@ -53,6 +53,7 @@ class APIWrapper {
     return createServer(async (req, res) => {
       const method = req.method;
       const url = req.url;
+      console.log(req.method, req.url);
 
       // check if the route is present
       const found = this.findRoute(method as string, url as string);
@@ -60,10 +61,7 @@ class APIWrapper {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
       res.setHeader('Access-Control-Max-Age', 2592000);
-      res.setHeader(
-        'Access-Control-Allow-Headers',
-        'Origin,X-Requested-With,Content-Type,Accept,content-type,application/json',
-      );
+      res.setHeader('Access-Control-Allow-Headers', '*');
       res.setHeader('Access-Control-Allow-Credentials', 'true');
 
       if (req.method === 'OPTIONS') {
@@ -102,7 +100,6 @@ class APIWrapper {
         // @ts-ignore
         res.json = (content: any) => {
           res.setHeader('content-type', 'application/json');
-          // res.statusCode = content.status | 200;
           res.writeHead(content.status || 200);
           res.write(JSON.stringify(content));
           return res.end();
@@ -110,8 +107,8 @@ class APIWrapper {
         return found.handler(req as any, res as any);
       }
 
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
-      res.end('Route not found.');
+      res.writeHead(404);
+      res.end({ status: 404, message: 'Route not found.' });
     });
   }
 
