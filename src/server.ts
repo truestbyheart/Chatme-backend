@@ -98,3 +98,5 @@ router.post(
 
 // START SERVER
 httpServer.listen(PORT, async () => console.log(`App running on port ${PORT}`));
+
+export default httpServer;
