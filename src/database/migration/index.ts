@@ -4,7 +4,7 @@ import migrations from './create-table';
 
 config();
 const { DATABASE_URL } = process.env;
-const client = new Pool({ connectionString: DATABASE_URL });
+const client = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
 // loop through the array of sql query and execute individual queries
 for (const sql of migrations) {

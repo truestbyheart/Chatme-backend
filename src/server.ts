@@ -25,7 +25,11 @@ const authHelper = new AuthHelper();
 
 // SOCKETS
 const httpServer = app.server();
-const io = new Server(httpServer);
+const io = new Server(httpServer, {
+  cors: {
+    origin: '*',
+  },
+});
 
 let externalSocket: Socket;
 io.on('connection', (socket: Socket) => {
