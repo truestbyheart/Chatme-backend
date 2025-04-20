@@ -1,9 +1,9 @@
 import { Pool } from 'pg';
 import { config } from 'dotenv';
 import migrations from './create-table';
+import { DATABASE_URL } from '../../Config';
 
 config();
-const { DATABASE_URL } = process.env;
 const client = new Pool({ connectionString: DATABASE_URL });
 
 // loop through the array of sql query and execute individual queries
