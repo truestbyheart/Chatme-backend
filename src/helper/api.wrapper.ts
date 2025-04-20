@@ -2,37 +2,76 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import Route from 'route-parser';
 import qs from 'qs';
+import { TokenPayload } from './auth.helper'
 
 export interface Response extends ServerResponse {
-  send: (response: string) => void;
+  send: (response: string | object) => void;
   json: (response: any) => void;
+  status: (code: number) => this;
+  setHeader: (name: string, value: string | number | readonly string[]) => this;
 }
 
 export interface Request extends IncomingMessage {
   params: any;
   query: any;
   body: any;
+  originalUrl: string;
+  path: string;
+  user: TokenPayload;
+}
+
+export type NextFunction = (err?: any) => void;
+export type MiddlewareFunction = (req: Request, res: Response, next: NextFunction, err?: Error,) => void;
+export type RouteHandler = (req: Request, res: Response, next?: NextFunction) => any;
+
+interface RouteConfig {
+  method: string;
+  url: any;
+  handler: RouteHandler;
+  middlewares: MiddlewareFunction[];
 }
 
 class APIWrapper {
-  routes: { method: string; url: any; handler: (req: Request, res: Response) => any }[];
+  routes: RouteConfig[];
+  globalMiddlewares: MiddlewareFunction[];
 
   /**
    * @constructor
-   * @description initialize the route array
+   * @description initialize the route array and global middlewares
    */
   constructor() {
     this.routes = [];
+    this.globalMiddlewares = [];
+  }
+
+  /**
+   * Add middleware to be executed for all routes
+   * @param middleware
+   */
+  use(middleware: MiddlewareFunction): APIWrapper {
+    this.globalMiddlewares.push(middleware);
+    return this;
   }
 
   /**
    * add route to the route array list
    * @param method
    * @param url
+   * @param middlewares
    * @param handler
    */
-  private addToRoute(method: string, url: string, handler: (req: Request, res: Response) => any): void {
-    this.routes.push({ method, url: new Route(url), handler });
+  private addToRoute(
+    method: string,
+    url: string,
+    middlewares: MiddlewareFunction[],
+    handler: RouteHandler
+  ): void {
+    this.routes.push({
+      method,
+      url: new Route(url),
+      handler,
+      middlewares
+    });
   }
 
   /**
@@ -41,9 +80,51 @@ class APIWrapper {
    * @param url
    */
   private findRoute(method: string, url: string) {
-    const route = this.routes.find((r) => r.method === method && r.url.match(url));
+    // Extract the path part without query parameters
+    const path = url.split('?')[0];
+
+    const route = this.routes.find((r) => {
+      return r.method === method && r.url.match(path);
+    });
+
     if (!route) return null;
-    return { handler: route.handler, params: route.url.match(url), query: qs.parse(url.split('?')[1]) };
+
+    return {
+      handler: route.handler,
+      middlewares: route.middlewares,
+      params: route.url.match(path),
+      query: qs.parse(url.split('?')[1]),
+      path
+    };
+  }
+
+  /**
+   * Execute middleware chain
+   */
+  private executeMiddlewares(
+    req: Request,
+    res: Response,
+    middlewares: MiddlewareFunction[],
+    index: number,
+    callback: () => void
+  ) {
+    // If we've gone through all middlewares, call the callback
+    if (index >= middlewares.length) {
+      return callback();
+    }
+
+    const middleware = middlewares[index];
+
+    // Execute current middleware and wait for next() to be called
+    middleware(req, res, (err) => {
+      // If error occurred, skip to the final callback
+      if (err) {
+        return callback();
+      }
+
+      // Otherwise proceed to next middleware
+      this.executeMiddlewares(req, res, middlewares, index + 1, callback);
+    });
   }
 
   /**
@@ -51,103 +132,161 @@ class APIWrapper {
    */
   server() {
     return createServer(async (req, res) => {
-      const method = req.method;
-      const url = req.url;
-      console.log(req.method, req.url);
+      const method = req.method || 'GET';
+      const url = req.url || '/';
+      console.log(`${method} ${url}`);
 
-      // check if the route is present
-      const found = this.findRoute(method as string, url as string);
-      // setting up cors
+      // Initialize request and response objects
+      const enhancedReq = req as Request;
+      const enhancedRes = res as Response;
+
+      // Add properties to request
+      enhancedReq.originalUrl = url;
+      enhancedReq.path = url.split('?')[0];
+
+      // Set up CORS headers
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-      res.setHeader('Access-Control-Max-Age', 2592000);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+      res.setHeader('Access-Control-Max-Age', '2592000');
       res.setHeader('Access-Control-Allow-Headers', '*');
       res.setHeader('Access-Control-Allow-Credentials', 'true');
 
-      if (req.method === 'OPTIONS') {
+      // Handle OPTIONS request for CORS preflight
+      if (method === 'OPTIONS') {
         res.writeHead(204);
         res.end();
         return;
       }
 
-      if (found) {
-        // @ts-ignore
-        req.params = found.params;
-        // @ts-ignore
-        req.query = found.query;
+      // Check if the route exists
+      const found = this.findRoute(method, url);
 
-        // body-parser
-        await new Promise((resolve, _reject) => {
+      if (found) {
+        // Add route parameters to request
+        enhancedReq.params = found.params;
+        enhancedReq.query = found.query;
+
+        // Parse request body
+        await new Promise((resolve) => {
           let data = '';
           req.on('data', (chunk: Buffer) => {
             data += chunk.toString();
           });
 
           req.on('end', () => {
-            // @ts-ignore
-            req.body = data ? JSON.parse(data) : null;
+            try {
+              enhancedReq.body = data ? JSON.parse(data) : {};
+            } catch (e) {
+              enhancedReq.body = data || {};
+            }
             resolve(true);
           });
         });
 
-        // @ts-ignore
-        res.send = (content: any) => {
-          res.setHeader('content-type', 'text/plain');
-          res.write(content);
-          return res.end();
+        // Enhance response object with Express-like methods
+        enhancedRes.status = function (code: number) {
+          this.statusCode = code;
+          return this;
         };
 
-        // @ts-ignore
-        res.json = (content: any) => {
-          res.setHeader('content-type', 'application/json');
-          res.writeHead(content.status || 200);
-          res.write(JSON.stringify(content));
-          return res.end();
+        enhancedRes.send = function (content: string | object) {
+          if (typeof content === 'string') {
+            this.setHeader('Content-Type', 'text/plain');
+            this.end(content);
+          } else {
+            this.setHeader('Content-Type', 'application/json');
+            this.end(JSON.stringify(content));
+          }
+          return this;
         };
-        return found.handler(req as any, res as any);
+
+        enhancedRes.json = function (content: any) {
+          this.setHeader('Content-Type', 'application/json');
+          if (!this.statusCode) {
+            this.statusCode = 200;
+          }
+          this.end(JSON.stringify(content));
+          return this;
+        };
+
+        enhancedRes.setHeader = function (name: string, value: string | number | readonly string[]) {
+          ServerResponse.prototype.setHeader.call(this, name, value);
+          return this;
+        };
+
+        // Combine global and route-specific middlewares
+        const allMiddlewares = [...this.globalMiddlewares, ...found.middlewares];
+
+        // Execute middleware chain
+        this.executeMiddlewares(enhancedReq, enhancedRes, allMiddlewares, 0, () => {
+          // After all middlewares, execute the route handler
+          try {
+            found.handler(enhancedReq, enhancedRes);
+          } catch (error) {
+            console.error('Route handler error:', error);
+            enhancedRes.status(500).json({
+              status: 500,
+              message: 'Internal Server Error',
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
+        });
+
+        return;
       }
 
+      // Route not found
       res.writeHead(404);
-      res.end({ status: 404, message: 'Route not found.' });
+      res.end(JSON.stringify({ status: 404, message: 'Route not found.' }));
     });
   }
 
   /**
    * Start the server on the particular port
    * @param port port to run the app
-   * @param cb the calstringl back function
+   * @param cb the callback function
    */
-  listen(port: number | string, cb: () => void) {
-    this.server().listen(port, cb);
+  listen(port: number | string, cb?: () => void) {
+    const server = this.server();
+    server.listen(port, cb);
+    return server;
   }
 
   Router() {
-    // GET request handler
-    const get = (url: string, handler: (req: Request, res: Response) => any) => {
-      return this.addToRoute('GET', url, handler);
+    const methods = {
+      // Route handlers with middleware support
+      get: (url: string, ...handlers: (MiddlewareFunction | RouteHandler)[]) => {
+        const handler = handlers.pop() as RouteHandler;
+        const middlewares = handlers as MiddlewareFunction[];
+        return this.addToRoute('GET', url, middlewares, handler);
+      },
+
+      post: (url: string, ...handlers: (MiddlewareFunction | RouteHandler)[]) => {
+        const handler = handlers.pop() as RouteHandler;
+        const middlewares = handlers as MiddlewareFunction[];
+        return this.addToRoute('POST', url, middlewares, handler);
+      },
+
+      put: (url: string, ...handlers: (MiddlewareFunction | RouteHandler)[]) => {
+        const handler = handlers.pop() as RouteHandler;
+        const middlewares = handlers as MiddlewareFunction[];
+        return this.addToRoute('PUT', url, middlewares, handler);
+      },
+
+      patch: (url: string, ...handlers: (MiddlewareFunction | RouteHandler)[]) => {
+        const handler = handlers.pop() as RouteHandler;
+        const middlewares = handlers as MiddlewareFunction[];
+        return this.addToRoute('PATCH', url, middlewares, handler);
+      },
+
+      delete: (url: string, ...handlers: (MiddlewareFunction | RouteHandler)[]) => {
+        const handler = handlers.pop() as RouteHandler;
+        const middlewares = handlers as MiddlewareFunction[];
+        return this.addToRoute('DELETE', url, middlewares, handler);
+      }
     };
 
-    // POST request handler
-    const post = (url: string, handler: (req: Request, res: Response) => any) => {
-      return this.addToRoute('POST', url, handler);
-    };
-
-    // PUT request handler
-    const put = (url: string, handler: (req: Request, res: Response) => any) => {
-      return this.addToRoute('PUT', url, handler);
-    };
-
-    // PATCH request handler
-    const patch = (url: string, handler: (req: Request, res: Response) => any) => {
-      return this.addToRoute('PATCH', url, handler);
-    };
-
-    // DELETE request handler
-    const del = (url: string, handler: (req: Request, res: Response) => any) => {
-      return this.addToRoute('DELETE', url, handler);
-    };
-
-    return { get, post, patch, put, delete: del };
+    return methods;
   }
 }
 
